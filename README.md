@@ -68,7 +68,7 @@ This kit has exactly one analytics project per installation. It has no users, we
 
 ## License
 
-Copyright (C) 2025-2026 [Zorin Projects S.P.](https://localzet.com). Created and maintained by [Ivan Zorin](mailto:creator@localzet.com).
+Copyright (C) 2025-2026 [Zorin Projects S.P.](https://zorin.space). Created and maintained by [Ivan Zorin](mailto:creator@localzet.com).
 
 Licensed under [`AGPL-3.0-or-later`](LICENSE). When redistributing the project or substantial portions of it, keep the copyright, license and attribution notices, including the link to the [original repository](https://github.com/localzet/standalone-analytics). See [`NOTICE`](NOTICE).
 

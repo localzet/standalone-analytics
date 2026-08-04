@@ -25,6 +25,6 @@ The package stores lifecycle events, safe interactions, UTM attribution, goals, 
 
 ## License
 
-Copyright (C) 2025-2026 [Zorin Projects S.P.](https://localzet.com). Created and maintained by [Ivan Zorin](mailto:creator@localzet.com).
+Copyright (C) 2025-2026 [Zorin Projects S.P.](https://zorin.space). Created and maintained by [Ivan Zorin](mailto:creator@localzet.com).
 
 Licensed under [`AGPL-3.0-or-later`](LICENSE). Preserve the included [`NOTICE`](NOTICE) when redistributing the package.
