@@ -34,7 +34,7 @@ export class SafeStorage {
   }
 
   public clearIdentity(): void {
-    for (const key of ['visitor_id', 'session_id', 'session_seen_at']) {
+    for (const key of ['visitor_id', 'session_id', 'session_seen_at', 'replay_sampled_session_id', 'replay_sampled']) {
       this.remove(key);
     }
   }

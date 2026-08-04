@@ -407,8 +407,8 @@ export class PersonalAnalytics {
     } as const;
     clearTimeout(this.replayTimer);
     this.replayTimer = undefined;
-    if (beacon) this.transport.beacon(event);
-    else void this.transport.send(event);
+    if (beacon && this.transport.beacon(event)) return;
+    void this.transport.send(event);
   }
 
   private scheduleReplayFlush(): void {
@@ -518,9 +518,11 @@ export class PersonalAnalytics {
   }
 
   private isReplaySampled(): boolean {
+    const sampledSessionId = this.storage.get('replay_sampled_session_id');
     const stored = this.storage.get('replay_sampled');
-    if (stored !== null) return stored === 'true';
+    if (sampledSessionId === this.sessionId && stored !== null) return stored === 'true';
     const sampled = Math.random() < this.options.replaySampleRate;
+    this.storage.set('replay_sampled_session_id', this.sessionId);
     this.storage.set('replay_sampled', String(sampled));
     return sampled;
   }

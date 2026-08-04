@@ -20,7 +20,7 @@ return [
     'admin_middleware' => ['web', 'auth'],
     'admin_prefix' => 'admin/analytics',
     'collector_path' => 'api/analytics/collect',
-    'max_payload_bytes' => 1_048_576,
+    'max_payload_bytes' => (int) env('PERSONAL_ANALYTICS_MAX_PAYLOAD_BYTES', 8_388_608),
     'max_batch_events' => 100,
     'store_ip' => env('PERSONAL_ANALYTICS_STORE_IP', false),
     'rate_limit_per_minute' => 600,

@@ -3,6 +3,8 @@
 
 import type { BatchEnvelope, CollectorResponse, EventEnvelope } from './types';
 
+const MAX_KEEPALIVE_BYTES = 60_000;
+
 export class Transport {
   public constructor(
     private readonly endpoint: string,
@@ -17,13 +19,14 @@ export class Transport {
 
   public async send(event: Omit<EventEnvelope, 'schemaVersion' | 'projectToken' | 'url'>): Promise<CollectorResponse | null> {
     const envelope = this.envelope(event);
+    const body = JSON.stringify(envelope);
     try {
       const response = await fetch(this.endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'text/plain;charset=UTF-8' },
-        body: JSON.stringify(envelope),
+        body,
         credentials: 'omit',
-        keepalive: true,
+        keepalive: this.byteLength(body) <= MAX_KEEPALIVE_BYTES,
       });
       if (!response.ok) {
         throw new Error(`Collector returned HTTP ${response.status}.`);
@@ -39,6 +42,7 @@ export class Transport {
   public beacon(event: Omit<EventEnvelope, 'schemaVersion' | 'projectToken' | 'url'>): boolean {
     try {
       const body = new Blob([JSON.stringify(this.envelope(event))], { type: 'text/plain;charset=UTF-8' });
+      if (body.size > MAX_KEEPALIVE_BYTES) return false;
       return navigator.sendBeacon(this.endpoint, body);
     } catch (error) {
       this.onError(error);
@@ -68,13 +72,14 @@ export class Transport {
     this.timer = undefined;
     try {
       const body = JSON.stringify(payload);
-      if (useBeacon && navigator.sendBeacon(this.endpoint, new Blob([body], { type: 'text/plain;charset=UTF-8' }))) return;
+      const bodySize = this.byteLength(body);
+      if (useBeacon && bodySize <= MAX_KEEPALIVE_BYTES && navigator.sendBeacon(this.endpoint, new Blob([body], { type: 'text/plain;charset=UTF-8' }))) return;
       const response = await fetch(this.endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'text/plain;charset=UTF-8' },
         body,
         credentials: 'omit',
-        keepalive: true,
+        keepalive: bodySize <= MAX_KEEPALIVE_BYTES,
       });
       if (!response.ok) throw new Error(`Collector returned HTTP ${response.status}.`);
     } catch (error) {
@@ -92,5 +97,9 @@ export class Transport {
       projectToken: this.projectToken,
       url: window.location.href,
     };
+  }
+
+  private byteLength(value: string): number {
+    return new Blob([value]).size;
   }
 }
