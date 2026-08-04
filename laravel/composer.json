@@ -43,5 +43,8 @@
   "config": {
     "allow-plugins": false,
     "sort-packages": true
+  },
+  "scripts": {
+    "verify-blade": "@php scripts/verify-blade.php"
   }
 }

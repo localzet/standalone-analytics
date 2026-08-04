@@ -40,12 +40,15 @@
     </main>
 </div>
 <dialog id="modal"><div class="modal-card"><button id="modal-close" class="modal-close" aria-label="Закрыть">×</button><div id="modal-body"></div></div></dialog>
-<script id="analytics-config" type="application/json">@json([
-    'apiBase' => url(config('personal-analytics.admin_prefix').'/api'),
-    'replayBase' => url(config('personal-analytics.admin_prefix').'/replays'),
-    'heatmapBase' => url(config('personal-analytics.admin_prefix').'/heatmaps'),
-    'authMode' => config('personal-analytics.admin_auth_mode'),
-])</script>
+@php
+    $analyticsConfig = [
+        'apiBase' => url(config('personal-analytics.admin_prefix').'/api'),
+        'replayBase' => url(config('personal-analytics.admin_prefix').'/replays'),
+        'heatmapBase' => url(config('personal-analytics.admin_prefix').'/heatmaps'),
+        'authMode' => config('personal-analytics.admin_auth_mode'),
+    ];
+@endphp
+<script id="analytics-config" type="application/json">@json($analyticsConfig)</script>
 <script src="{{ route('personal-analytics.admin.asset', ['asset' => 'admin.js']) }}" defer></script>
 </body>
 </html>
