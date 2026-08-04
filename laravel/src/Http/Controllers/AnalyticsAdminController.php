@@ -14,6 +14,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
 use Illuminate\View\View;
+use Symfony\Component\HttpFoundation\BinaryFileResponse;
 use Localzet\LaravelAnalytics\Services\HeatmapStorage;
 use Localzet\LaravelAnalytics\Services\ReplayStorage;
 use Localzet\LaravelAnalytics\Services\ReportService;
@@ -35,8 +36,20 @@ final class AnalyticsAdminController extends Controller
             'dashboard' => $reports->dashboard($from, $to),
             'realtime' => $reports->realtime(),
             'journeys' => $reports->journeys($from, $to),
+            'events' => $reports->rawEvents($from, $to, $request->query()),
+            'sessions' => $reports->sessions($from, $to, $request->query()),
+            'visitors' => $reports->visitors($from, $to, $request->query()),
+            'errors' => $reports->rawEvents($from, $to, [...$request->query(), 'category' => 'error']),
+            'performance' => $reports->rawEvents($from, $to, [...$request->query(), 'category' => 'performance']),
             'replays' => $reports->replays($from, $to),
             'heatmaps' => $reports->heatmaps($from, $to),
+            'heatmap' => $reports->heatmap(
+                (string) $request->query('key'),
+                (string) $request->query('device', 'desktop'),
+                $from,
+                $to,
+            ),
+            'health' => $reports->health(),
             default => abort(404),
         };
 
@@ -53,5 +66,20 @@ final class AnalyticsAdminController extends Controller
         abort_unless(in_array($device, ['desktop', 'tablet', 'mobile'], true), 404);
 
         return response()->json(['events' => $storage->snapshot($heatmap, $device)])->header('Cache-Control', 'private, no-store');
+    }
+
+    public function asset(string $asset): BinaryFileResponse
+    {
+        $path = dirname(__DIR__, 3).'/resources/dist/'.$asset;
+        abort_unless(is_file($path), 404);
+
+        return response()->file($path, [
+            'Cache-Control' => 'public, max-age=31536000, immutable',
+            'Content-Type' => match (true) {
+                str_ends_with($asset, '.css') => 'text/css; charset=utf-8',
+                str_ends_with($asset, '.txt') => 'text/plain; charset=utf-8',
+                default => 'text/javascript; charset=utf-8',
+            },
+        ]);
     }
 }

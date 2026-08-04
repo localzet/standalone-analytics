@@ -9,7 +9,7 @@ Standalone, single-project analytics extracted from the Localzet Analytics track
 
 It contains:
 
-- `laravel/` — production-oriented Laravel 13 adapter with PostgreSQL partitions, queues, rollups, S3-compatible replay/heatmap storage and authenticated admin reports;
+- `laravel/` — production-oriented Laravel 13 adapter with PostgreSQL partitions, queues, rollups, S3-compatible replay/heatmap storage and a complete protected analytics console;
 - `php/` — framework-agnostic MySQL/PDO ingestion, goals and reports for small non-Laravel integrations;
 - `tracker/` — TypeScript browser SDK with autocapture, attribution, product/ecommerce events, diagnostics, heatmaps and rrweb recording;
 - `examples/plain-php/` — minimal collector/reporting endpoints and an admin page;
@@ -64,7 +64,7 @@ analytics.ecommerce('purchase', { orderId: 'A-42', revenue: 1990, currency: 'RUB
 
 ## Scope
 
-This kit has exactly one analytics project per installation. It has no users, websites, teams, plans, billing, quotas or public dashboards. Authentication of the admin area remains the host application's responsibility. The public project token identifies traffic but is not an admin secret; ingestion is additionally restricted by the configured host/origin.
+This kit has exactly one analytics project per installation. It has no users, websites, teams, plans, billing or quotas. The console can use the host application's Laravel authentication or its own independent admin token. The public project token identifies traffic but is never accepted as an admin secret; ingestion is additionally restricted by the configured host/origin.
 
 ## License
 

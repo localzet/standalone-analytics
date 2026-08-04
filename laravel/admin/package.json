@@ -1,0 +1,17 @@
+{
+  "name": "@localzet/personal-analytics-admin",
+  "private": true,
+  "version": "0.1.0",
+  "license": "AGPL-3.0-or-later",
+  "type": "module",
+  "scripts": {
+    "build": "esbuild src/admin.js --bundle --minify --format=iife --target=es2022 --legal-comments=linked --outdir=../resources/dist --entry-names=admin --asset-names=[name]"
+  },
+  "dependencies": {
+    "chart.js": "^4.4.9",
+    "rrweb-player": "^2.1.1"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.0"
+  }
+}

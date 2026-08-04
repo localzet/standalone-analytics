@@ -28,6 +28,7 @@ final readonly class Config
         public int $replayRetentionDays = 30,
         public int $maxPayloadBytes = 1_048_576,
         public int $maxReplayChunkEvents = 100,
+        public int $maxDecodedPayloadBytes = 33_554_432,
     ) {
         if ($projectToken === '' || strlen($projectToken) > 128) {
             throw new InvalidArgumentException('Project token must contain 1-128 characters.');

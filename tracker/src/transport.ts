@@ -19,14 +19,14 @@ export class Transport {
 
   public async send(event: Omit<EventEnvelope, 'schemaVersion' | 'projectToken' | 'url'>): Promise<CollectorResponse | null> {
     const envelope = this.envelope(event);
-    const body = JSON.stringify(envelope);
     try {
+      const encoded = await this.encodeBody(JSON.stringify(envelope));
       const response = await fetch(this.endpoint, {
         method: 'POST',
-        headers: { 'Content-Type': 'text/plain;charset=UTF-8' },
-        body,
+        headers: encoded.headers,
+        body: encoded.body,
         credentials: 'omit',
-        keepalive: this.byteLength(body) <= MAX_KEEPALIVE_BYTES,
+        keepalive: encoded.size <= MAX_KEEPALIVE_BYTES,
       });
       if (!response.ok) {
         throw new Error(`Collector returned HTTP ${response.status}.`);
@@ -74,12 +74,13 @@ export class Transport {
       const body = JSON.stringify(payload);
       const bodySize = this.byteLength(body);
       if (useBeacon && bodySize <= MAX_KEEPALIVE_BYTES && navigator.sendBeacon(this.endpoint, new Blob([body], { type: 'text/plain;charset=UTF-8' }))) return;
+      const encoded = await this.encodeBody(body);
       const response = await fetch(this.endpoint, {
         method: 'POST',
-        headers: { 'Content-Type': 'text/plain;charset=UTF-8' },
-        body,
+        headers: encoded.headers,
+        body: encoded.body,
         credentials: 'omit',
-        keepalive: bodySize <= MAX_KEEPALIVE_BYTES,
+        keepalive: encoded.size <= MAX_KEEPALIVE_BYTES,
       });
       if (!response.ok) throw new Error(`Collector returned HTTP ${response.status}.`);
     } catch (error) {
@@ -101,5 +102,21 @@ export class Transport {
 
   private byteLength(value: string): number {
     return new Blob([value]).size;
+  }
+
+  private async encodeBody(value: string): Promise<{ body: BodyInit; headers: Record<string, string>; size: number }> {
+    const source = new Blob([value], { type: 'text/plain;charset=UTF-8' });
+    if (typeof CompressionStream !== 'function' || source.size < MAX_KEEPALIVE_BYTES) {
+      return { body: value, headers: { 'Content-Type': 'text/plain;charset=UTF-8' }, size: source.size };
+    }
+
+    const stream = source.stream().pipeThrough(new CompressionStream('gzip'));
+    const compressed = await new Response(stream).blob();
+    const body = new Blob(['PA1GZIP\n', compressed], { type: 'text/plain;charset=UTF-8' });
+    return {
+      body,
+      headers: { 'Content-Type': 'text/plain;charset=UTF-8' },
+      size: body.size,
+    };
   }
 }

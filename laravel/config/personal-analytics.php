@@ -7,6 +7,8 @@
 
 declare(strict_types=1);
 
+$adminAuthMode = (string) env('PERSONAL_ANALYTICS_ADMIN_AUTH_MODE', 'middleware');
+
 return [
     'enabled' => env('PERSONAL_ANALYTICS_ENABLED', false),
     'project_token' => env('PERSONAL_ANALYTICS_TOKEN'),
@@ -17,10 +19,16 @@ return [
     'queue' => env('PERSONAL_ANALYTICS_QUEUE', 'analytics'),
     'storage_disk' => env('PERSONAL_ANALYTICS_STORAGE_DISK', env('FILESYSTEM_DISK', 'local')),
     'storage_prefix' => env('PERSONAL_ANALYTICS_STORAGE_PREFIX', 'analytics/replays'),
-    'admin_middleware' => ['web', 'auth'],
+    'admin_auth_mode' => $adminAuthMode,
+    'admin_token' => env('PERSONAL_ANALYTICS_ADMIN_TOKEN'),
+    'admin_middleware' => array_values(array_filter(array_map(
+        'trim',
+        explode(',', (string) env('PERSONAL_ANALYTICS_ADMIN_MIDDLEWARE', $adminAuthMode === 'token' ? 'web' : 'web,auth')),
+    ))),
     'admin_prefix' => 'admin/analytics',
     'collector_path' => 'api/analytics/collect',
     'max_payload_bytes' => (int) env('PERSONAL_ANALYTICS_MAX_PAYLOAD_BYTES', 8_388_608),
+    'max_decoded_payload_bytes' => (int) env('PERSONAL_ANALYTICS_MAX_DECODED_PAYLOAD_BYTES', 33_554_432),
     'max_batch_events' => 100,
     'store_ip' => env('PERSONAL_ANALYTICS_STORE_IP', false),
     'rate_limit_per_minute' => 600,

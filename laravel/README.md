@@ -21,6 +21,7 @@ PERSONAL_ANALYTICS_QUEUE_CONNECTION=redis
 PERSONAL_ANALYTICS_QUEUE=analytics
 PERSONAL_ANALYTICS_STORAGE_DISK=s3
 PERSONAL_ANALYTICS_MAX_PAYLOAD_BYTES=8388608
+PERSONAL_ANALYTICS_MAX_DECODED_PAYLOAD_BYTES=33554432
 PERSONAL_ANALYTICS_STORE_IP=false
 ```
 
@@ -31,7 +32,19 @@ php artisan schedule:work
 
 Install `@localzet/personal-analytics-tracker` in the frontend and point `endpoint` to `/api/analytics/collect`. The public collector accepts bounded JSON batches and returns `202`; queue jobs project visitor/session state and bulk-insert event facts.
 
-The authenticated dashboard is available at `/admin/analytics` through the host application's `web` and `auth` middleware. Views and configuration are publishable. API reports include dashboard, realtime, journeys, replays and heatmaps.
+The full analytics console is available at `/admin/analytics`. It includes overview charts, realtime activity, raw event drill-down, sessions, visitors, attribution, client errors, performance telemetry, playable rrweb replays, heatmaps, goals, funnels, ecommerce and pipeline health.
+
+By default, the console is protected by the host application's `web` and `auth` middleware. For a standalone token-protected console, use a separate random secret:
+
+```dotenv
+PERSONAL_ANALYTICS_ADMIN_AUTH_MODE=token
+PERSONAL_ANALYTICS_ADMIN_TOKEN=replace-with-a-separate-256-bit-secret
+PERSONAL_ANALYTICS_ADMIN_MIDDLEWARE=web
+```
+
+Never reuse `PERSONAL_ANALYTICS_TOKEN` for admin access. It is a public ingestion identifier embedded in frontend JavaScript and cannot protect analytics data. Token mode sends the separate admin secret in the `Authorization: Bearer` header and retains it only in browser `sessionStorage`.
+
+The browser tracker and Laravel package should be upgraded together. Tracker 0.2 compresses large replay and heatmap payloads before transport; Laravel 0.2 safely decompresses them with independent compressed and decoded size limits.
 
 ## Storage model
 

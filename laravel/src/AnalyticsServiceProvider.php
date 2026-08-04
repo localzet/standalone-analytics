@@ -18,6 +18,9 @@ use Localzet\LaravelAnalytics\Commands\AggregateAnalyticsCommand;
 use Localzet\LaravelAnalytics\Commands\MaintainAnalyticsCommand;
 use Localzet\LaravelAnalytics\Contracts\GeoResolver;
 use Localzet\LaravelAnalytics\Contracts\UserAgentResolver;
+use Localzet\LaravelAnalytics\Http\Middleware\AnalyticsCors;
+use Localzet\LaravelAnalytics\Http\Middleware\AnalyticsAdminSecurityHeaders;
+use Localzet\LaravelAnalytics\Http\Middleware\AuthenticateAnalyticsAdmin;
 use Localzet\LaravelAnalytics\Services\HeatmapStorage;
 use Localzet\LaravelAnalytics\Services\ReplayStorage;
 use Localzet\LaravelAnalytics\Support\NullGeoResolver;
@@ -42,6 +45,9 @@ final class AnalyticsServiceProvider extends ServiceProvider
         $this->loadRoutesFrom(dirname(__DIR__).'/routes/analytics.php');
         $this->loadViewsFrom(dirname(__DIR__).'/resources/views', 'personal-analytics');
         $this->loadMigrationsFrom(dirname(__DIR__).'/database/migrations');
+        $this->app['router']->aliasMiddleware('personal-analytics-cors', AnalyticsCors::class);
+        $this->app['router']->aliasMiddleware('personal-analytics-admin-security', AnalyticsAdminSecurityHeaders::class);
+        $this->app['router']->aliasMiddleware('personal-analytics-admin', AuthenticateAnalyticsAdmin::class);
         $this->publishes([
             dirname(__DIR__).'/config/personal-analytics.php' => config_path('personal-analytics.php'),
         ], 'personal-analytics-config');
@@ -52,6 +58,8 @@ final class AnalyticsServiceProvider extends ServiceProvider
         RateLimiter::for('personal-analytics-ingest', static fn (Request $request): Limit => Limit::perMinute(
             (int) config('personal-analytics.rate_limit_per_minute', 600),
         )->by($request->ip().'|'.$request->header('Origin', 'unknown')));
+        RateLimiter::for('personal-analytics-admin', static fn (Request $request): Limit => Limit::perMinute(120)
+            ->by($request->ip()));
 
         if ($this->app->runningInConsole()) {
             $this->commands([AggregateAnalyticsCommand::class, MaintainAnalyticsCommand::class]);

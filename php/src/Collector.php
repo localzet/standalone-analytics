@@ -31,6 +31,16 @@ final readonly class Collector
         if (strlen($json) > $this->config->maxPayloadBytes) {
             throw new InvalidEvent('Payload is too large.');
         }
+        if (str_starts_with($json, "PA1GZIP\n")) {
+            $decoded = gzdecode(substr($json, 8));
+            if ($decoded === false) {
+                throw new InvalidEvent('Payload contains invalid gzip data.');
+            }
+            $json = $decoded;
+        }
+        if (strlen($json) > $this->config->maxDecodedPayloadBytes) {
+            throw new InvalidEvent('Decoded payload is too large.');
+        }
 
         try {
             $payload = json_decode($json, true, 64, JSON_THROW_ON_ERROR);

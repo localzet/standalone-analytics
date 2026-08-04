@@ -12,6 +12,7 @@ namespace Localzet\LaravelAnalytics\Services;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\ConnectionInterface;
 use Illuminate\Database\DatabaseManager;
+use Illuminate\Support\Str;
 
 final readonly class ReportService
 {
@@ -205,6 +206,127 @@ final readonly class ReportService
             })
             ->selectRaw('goal.key, goal.name, COUNT(conversion.event_id) AS conversions, COUNT(DISTINCT conversion.visitor_id) AS visitors, COALESCE(SUM(conversion.value), 0) AS value')
             ->groupBy('goal.key', 'goal.name')->orderByDesc('conversions')->get()->all();
+    }
+
+    /** @param array<string, mixed> $filters */
+    public function rawEvents(CarbonImmutable $from, CarbonImmutable $to, array $filters): array
+    {
+        $query = $this->connection()->table('analytics_events')->whereBetween('occurred_at', [$from, $to]);
+        foreach (['category', 'name', 'path'] as $field) {
+            $value = trim((string) ($filters[$field] ?? ''));
+            if ($value !== '') {
+                $query->where($field, $value);
+            }
+        }
+        foreach (['visitor_id', 'session_id'] as $field) {
+            $value = trim((string) ($filters[$field] ?? ''));
+            abort_if($value !== '' && ! Str::isUuid($value), 422, "{$field} must be a UUID.");
+            if ($value !== '') {
+                $query->where($field, $value);
+            }
+        }
+        $search = trim((string) ($filters['search'] ?? ''));
+        if ($search !== '') {
+            $query->where(function ($nested) use ($search): void {
+                $term = '%'.str_replace(['%', '_'], ['\\%', '\\_'], $search).'%';
+                $nested->where('name', 'ilike', $term)->orWhere('path', 'ilike', $term)
+                    ->orWhereRaw('properties::text ILIKE ?', [$term]);
+            });
+        }
+
+        return $this->page($query, $filters, [
+            'id', 'visitor_id', 'session_id', 'page_event_id', 'name', 'category', 'path', 'title',
+            'properties', 'metrics', 'context', 'occurred_at', 'received_at',
+        ], 'occurred_at');
+    }
+
+    /** @param array<string, mixed> $filters */
+    public function sessions(CarbonImmutable $from, CarbonImmutable $to, array $filters): array
+    {
+        $query = $this->connection()->table('analytics_sessions')->whereBetween('started_at', [$from, $to]);
+        $visitor = trim((string) ($filters['visitor_id'] ?? ''));
+        abort_if($visitor !== '' && ! Str::isUuid($visitor), 422, 'visitor_id must be a UUID.');
+        if ($visitor !== '') {
+            $query->where('visitor_id', $visitor);
+        }
+
+        return $this->page($query, $filters, [
+            'id', 'visitor_id', 'started_at', 'last_seen_at', 'entry_path', 'exit_path', 'attribution',
+            'pageviews', 'events_count', 'engagement_ms', 'is_bounced',
+        ], 'started_at');
+    }
+
+    /** @param array<string, mixed> $filters */
+    public function visitors(CarbonImmutable $from, CarbonImmutable $to, array $filters): array
+    {
+        $query = $this->connection()->table('analytics_visitors')->whereBetween('last_seen_at', [$from, $to]);
+        $search = trim((string) ($filters['search'] ?? ''));
+        if ($search !== '') {
+            $term = '%'.str_replace(['%', '_'], ['\\%', '\\_'], $search).'%';
+            $query->where(function ($nested) use ($term): void {
+                $nested->whereRaw('id::text ILIKE ?', [$term])->orWhere('identified_user_id', 'ilike', $term)
+                    ->orWhereRaw('traits::text ILIKE ?', [$term]);
+            });
+        }
+
+        return $this->page($query, $filters, [
+            'id', 'identified_user_id', 'traits', 'acquisition', 'technology', 'geography',
+            'first_seen_at', 'last_seen_at', 'sessions_count', 'events_count',
+        ], 'last_seen_at');
+    }
+
+    public function heatmap(string $key, string $device, CarbonImmutable $from, CarbonImmutable $to): array
+    {
+        abort_unless(preg_match('/^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,63}$/', $key) === 1, 422);
+        abort_unless(in_array($device, ['desktop', 'tablet', 'mobile'], true), 422);
+        $connection = $this->connection();
+
+        return [
+            'definition' => $connection->table('analytics_heatmaps')->where('key', $key)->first(),
+            'snapshot' => $connection->table('analytics_heatmap_snapshots')->where('heatmap_key', $key)
+                ->where('device_type', $device)->first(),
+            'points' => $connection->table('analytics_heatmap_points')->where('heatmap_key', $key)
+                ->where('device_type', $device)->whereBetween('day', [$from->toDateString(), $to->toDateString()])
+                ->selectRaw('point_type, x_bucket, y_bucket, value_bucket, SUM(events) AS events')
+                ->groupBy('point_type', 'x_bucket', 'y_bucket', 'value_bucket')->orderByDesc('events')->limit(5000)->get()->all(),
+        ];
+    }
+
+    public function health(): array
+    {
+        $connection = $this->connection();
+
+        return [
+            'events' => $connection->table('analytics_events')->count(),
+            'sessions' => $connection->table('analytics_sessions')->count(),
+            'visitors' => $connection->table('analytics_visitors')->count(),
+            'replays' => $connection->table('analytics_replays')->count(),
+            'replayChunks' => $connection->table('analytics_replay_chunks')->count(),
+            'heatmaps' => $connection->table('analytics_heatmaps')->count(),
+            'latestEventAt' => $connection->table('analytics_events')->max('received_at'),
+            'latestReplayAt' => $connection->table('analytics_replays')->max('last_seen_at'),
+            'latestRollupAt' => $connection->table('analytics_daily_rollups')->max('updated_at'),
+            'queueConnection' => config('personal-analytics.queue_connection'),
+            'queue' => config('personal-analytics.queue'),
+            'storageDisk' => config('personal-analytics.storage_disk'),
+            'storagePrefix' => config('personal-analytics.storage_prefix'),
+            'maxPayloadBytes' => config('personal-analytics.max_payload_bytes'),
+            'maxDecodedPayloadBytes' => config('personal-analytics.max_decoded_payload_bytes'),
+        ];
+    }
+
+    /** @param array<string, mixed> $filters @param list<string> $columns */
+    private function page($query, array $filters, array $columns, string $orderBy): array
+    {
+        $page = max(1, (int) ($filters['page'] ?? 1));
+        $perPage = max(10, min(200, (int) ($filters['per_page'] ?? 50)));
+        $total = (clone $query)->count();
+        $data = $query->select($columns)->orderByDesc($orderBy)->forPage($page, $perPage)->get()->all();
+
+        return [
+            'data' => $data,
+            'meta' => ['page' => $page, 'perPage' => $perPage, 'total' => $total, 'lastPage' => max(1, (int) ceil($total / $perPage))],
+        ];
     }
 
     private function connection(): ConnectionInterface

@@ -24,6 +24,16 @@ final class AnalyticsCollectorController extends Controller
     {
         $body = $request->getContent();
         abort_if(strlen($body) > (int) config('personal-analytics.max_payload_bytes'), 413, 'Analytics payload is too large.');
+        $isGzip = str_starts_with($body, "PA1GZIP\n");
+        if ($isGzip) {
+            $body = substr($body, 8);
+        }
+        if ($isGzip || $request->header('X-Analytics-Content-Encoding') === 'gzip') {
+            $decoded = gzdecode($body);
+            abort_if($decoded === false, 422, 'Analytics payload contains invalid gzip data.');
+            $body = $decoded;
+        }
+        abort_if(strlen($body) > (int) config('personal-analytics.max_decoded_payload_bytes'), 413, 'Decoded analytics payload is too large.');
         try {
             $payload = json_decode($body, true, 64, JSON_THROW_ON_ERROR);
         } catch (JsonException) {
