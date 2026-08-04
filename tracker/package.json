@@ -1,0 +1,61 @@
+{
+  "name": "@localzet/personal-analytics-tracker",
+  "version": "0.1.0",
+  "description": "Single-project browser analytics tracker with actions, goals, heatmaps and rrweb replays",
+  "license": "AGPL-3.0-or-later",
+  "author": {
+    "name": "Ivan Zorin",
+    "email": "creator@localzet.com",
+    "url": "https://localzet.com"
+  },
+  "homepage": "https://github.com/localzet/standalone-analytics#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/localzet/standalone-analytics.git",
+    "directory": "tracker"
+  },
+  "bugs": {
+    "url": "https://github.com/localzet/standalone-analytics/issues"
+  },
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE",
+    "NOTICE"
+  ],
+  "scripts": {
+    "build": "tsup src/index.ts --format esm,cjs --dts --clean",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@rrweb/record": "^2.1.1",
+    "@rrweb/types": "^2.1.1"
+  },
+  "devDependencies": {
+    "jsdom": "^26.0.0",
+    "tsup": "^8.0.0",
+    "typescript": "^5.7.0",
+    "vitest": "^3.0.0"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "overrides": {
+    "esbuild": "0.28.1"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}
