@@ -32,6 +32,7 @@ final readonly class ReportService
             'countries' => $this->top($from, $to, 'country'),
             'devices' => $this->top($from, $to, 'device'),
             'errors' => $this->category($from, $to, 'error'),
+            'errorDetails' => $this->errorDetails($from, $to),
             'performance' => $this->category($from, $to, 'performance'),
             'ecommerce' => $this->ecommerce($from, $to),
             'funnels' => $this->funnels($from, $to),
@@ -77,6 +78,29 @@ final readonly class ReportService
         return $this->connection()->table('analytics_events')->where('category', $category)->whereBetween('occurred_at', [$from, $to])
             ->selectRaw('name, COUNT(*) AS events, COUNT(DISTINCT visitor_id) AS visitors, AVG(COALESCE((metrics->>\'value\')::numeric, (metrics->>\'duration\')::numeric, 0)) AS average')
             ->groupBy('name')->orderByDesc('events')->limit(100)->get()->all();
+    }
+
+    public function errorDetails(CarbonImmutable $from, CarbonImmutable $to): array
+    {
+        return $this->connection()->table('analytics_events')
+            ->where('category', 'error')->whereBetween('occurred_at', [$from, $to])
+            ->select(['id', 'name', 'path', 'visitor_id', 'session_id', 'occurred_at'])
+            ->selectRaw(<<<'SQL'
+                properties->>'message' AS message,
+                properties->>'errorType' AS error_type,
+                properties->>'method' AS method,
+                properties->>'url' AS url,
+                properties->>'status' AS status,
+                properties->>'statusText' AS status_text,
+                properties->>'source' AS source,
+                properties->>'line' AS line,
+                properties->>'column' AS column,
+                properties->>'stack' AS stack,
+                properties->>'reason' AS reason,
+                properties->>'tag' AS resource_tag,
+                metrics->>'duration' AS duration
+                SQL)
+            ->orderByDesc('occurred_at')->limit(200)->get()->all();
     }
 
     public function ecommerce(CarbonImmutable $from, CarbonImmutable $to): array

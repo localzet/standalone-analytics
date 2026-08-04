@@ -164,10 +164,21 @@ function installNetworkCapture(emit: (event: AnalyticsEvent) => void, endpoint: 
     const started = performance.now();
     try {
       const response = await originalFetch(input, init);
-      emit({ name: 'http_request', category: 'network', properties: { method: init?.method ?? 'GET', url: safeUrl(url), status: response.status, ok: response.ok }, metrics: { duration: performance.now() - started } });
+      emit({
+        name: response.ok ? 'http_request' : 'http_error',
+        category: response.ok ? 'network' : 'error',
+        properties: {
+          method: init?.method ?? 'GET', url: safeUrl(url), status: response.status,
+          statusText: response.statusText.slice(0, 128), message: response.ok ? undefined : `HTTP ${response.status}`,
+        },
+        metrics: { duration: performance.now() - started },
+      });
       return response;
     } catch (error) {
-      emit({ name: 'http_error', category: 'error', properties: { method: init?.method ?? 'GET', url: safeUrl(url), errorType: error instanceof Error ? error.name : 'Error' }, metrics: { duration: performance.now() - started } });
+      emit({ name: 'http_error', category: 'error', properties: {
+        method: init?.method ?? 'GET', url: safeUrl(url), errorType: error instanceof Error ? error.name : 'Error',
+        message: error instanceof Error ? error.message.slice(0, 512) : String(error).slice(0, 512),
+      }, metrics: { duration: performance.now() - started } });
       throw error;
     }
   };
@@ -184,7 +195,15 @@ function installNetworkCapture(emit: (event: AnalyticsEvent) => void, endpoint: 
     request.__paStarted = performance.now();
     this.addEventListener('loadend', () => {
       if (safeUrl(request.__paUrl ?? '') === safeUrl(endpoint)) return;
-      emit({ name: 'xhr_request', category: 'network', properties: { method: request.__paMethod, url: safeUrl(request.__paUrl ?? ''), status: request.status }, metrics: { duration: performance.now() - (request.__paStarted ?? performance.now()) } });
+      const ok = request.status >= 200 && request.status < 300;
+      emit({
+        name: ok ? 'xhr_request' : 'xhr_error', category: ok ? 'network' : 'error',
+        properties: {
+          method: request.__paMethod, url: safeUrl(request.__paUrl ?? ''), status: request.status,
+          statusText: request.statusText.slice(0, 128), message: ok ? undefined : request.status === 0 ? 'XHR network error' : `HTTP ${request.status}`,
+        },
+        metrics: { duration: performance.now() - (request.__paStarted ?? performance.now()) },
+      });
     }, { once: true });
     send.call(this, body);
   };
