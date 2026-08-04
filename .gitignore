@@ -1,0 +1,8 @@
+php/vendor/
+php/composer.lock
+php/.phpunit.result.cache
+laravel/vendor/
+laravel/composer.lock
+tracker/node_modules/
+tracker/dist/
+examples/plain-php/config.php
