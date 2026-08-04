@@ -1,0 +1,129 @@
+<!--
+  SPDX-FileCopyrightText: 2025-2026 Zorin Projects S.P. <creator@localzet.com>
+  SPDX-License-Identifier: AGPL-3.0-or-later
+-->
+
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Personal Analytics</title>
+  <link rel="stylesheet" href="https://cdn.rrweb.com/all/2.1.1/style.css">
+  <style>
+    :root { color-scheme: dark; font-family: Inter, system-ui, sans-serif; background: #0b1020; color: #e8ecf4; }
+    body { margin: 0; padding: 32px; }
+    main { max-width: 1280px; margin: auto; }
+    header { display: flex; justify-content: space-between; align-items: center; gap: 16px; }
+    button { cursor: pointer; border: 0; border-radius: 8px; padding: 10px 14px; background: #6d5dfc; color: white; }
+    .cards { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin: 24px 0; }
+    .card, section { background: #141b2d; border: 1px solid #26304a; border-radius: 12px; padding: 18px; }
+    .value { display: block; margin-top: 8px; font-size: 28px; font-weight: 700; }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { text-align: left; border-bottom: 1px solid #26304a; padding: 10px 6px; }
+    th { color: #9ca8c4; }
+    #player { margin-top: 20px; overflow: auto; }
+    #heatmap-stage { position: relative; min-height: 420px; overflow: auto; }
+    #heatmap-canvas { position: absolute; inset: 0; z-index: 10; pointer-events: none; }
+    @media (max-width: 800px) { .cards, .grid { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+<main>
+  <header><div><h1>Personal Analytics</h1><p>Однопроектная статистика без SaaS-слоя</p></div><button id="token">Токен админки</button></header>
+  <div id="status"></div>
+  <div class="cards" id="summary"></div>
+  <div class="grid">
+    <section><h2>Страницы</h2><div id="pages"></div></section>
+    <section><h2>UTM-источники</h2><div id="utm"></div></section>
+    <section><h2>Цели</h2><div id="goals"></div></section>
+    <section><h2>Последние реплеи</h2><div id="replays"></div></section>
+    <section><h2>Тепловые карты</h2><div id="heatmaps"></div></section>
+    <section><h2>Устройства</h2><div id="devices"></div></section>
+  </div>
+  <section id="player" hidden><h2>Реплей сессии</h2><div id="replay"></div></section>
+  <section id="heatmap" hidden><h2>Тепловая карта кликов</h2><div id="heatmap-stage"><div id="heatmap-replay"></div><canvas id="heatmap-canvas"></canvas></div></section>
+</main>
+<script type="module">
+  import { Replayer } from 'https://cdn.rrweb.com/all/2.1.1/all.js';
+
+  let adminToken = sessionStorage.getItem('analytics_admin_token') ?? '';
+  const status = document.querySelector('#status');
+  document.querySelector('#token').addEventListener('click', () => {
+    adminToken = prompt('ANALYTICS_ADMIN_TOKEN', adminToken) ?? '';
+    sessionStorage.setItem('analytics_admin_token', adminToken);
+    load();
+  });
+
+  const api = async (view, id) => {
+    const query = new URLSearchParams({ view });
+    if (id) query.set('id', id);
+    const response = await fetch(`admin-api.php?${query}`, { headers: { Authorization: `Bearer ${adminToken}` } });
+    if (!response.ok) throw new Error((await response.json()).error ?? `HTTP ${response.status}`);
+    return response.json();
+  };
+  const table = (rows, columns) => `<table><thead><tr>${columns.map(([key, label]) => `<th>${label}</th>`).join('')}</tr></thead><tbody>${rows.map(row => `<tr>${columns.map(([key]) => `<td>${escape(String(row[key] ?? '—'))}</td>`).join('')}</tr>`).join('')}</tbody></table>`;
+  const escape = value => value.replace(/[&<>'"]/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' })[char]);
+
+  async function load() {
+    if (!adminToken) { status.textContent = 'Укажите токен админки.'; return; }
+    try {
+      const [dashboard, replays, heatmaps] = await Promise.all([api('dashboard'), api('replays'), api('heatmaps')]);
+      status.textContent = '';
+      const labels = { visitors: 'Посетители', sessions: 'Сессии', pageviews: 'Просмотры', bounceRate: 'Отказы, %' };
+      document.querySelector('#summary').innerHTML = Object.entries(dashboard.summary).map(([key, value]) => `<div class="card">${labels[key]}<span class="value">${value}</span></div>`).join('');
+      document.querySelector('#pages').innerHTML = table(dashboard.pages, [['path', 'Путь'], ['pageviews', 'Просмотры'], ['visitors', 'Посетители']]);
+      document.querySelector('#utm').innerHTML = table(dashboard.utm.sources, [['value', 'Источник'], ['pageviews', 'Просмотры']]);
+      document.querySelector('#goals').innerHTML = table(dashboard.goals, [['name', 'Цель'], ['conversions', 'Конверсии']]);
+      document.querySelector('#devices').innerHTML = table(dashboard.devices, [['value', 'Тип'], ['visitors', 'Посетители']]);
+      document.querySelector('#replays').innerHTML = `${table(replays, [['startedAt', 'Начало'], ['events', 'События']])}<p>${replays.map(item => `<button data-replay="${item.id}">Открыть #${item.id}</button>`).join(' ')}</p>`;
+      document.querySelector('#heatmaps').innerHTML = `${table(heatmaps, [['name', 'Карта'], ['path', 'Путь']])}<p>${heatmaps.map(item => `<button data-heatmap="${item.id}">Открыть ${escape(item.name)}</button>`).join(' ')}</p>`;
+      document.querySelectorAll('[data-replay]').forEach(button => button.addEventListener('click', () => play(button.dataset.replay)));
+      document.querySelectorAll('[data-heatmap]').forEach(button => button.addEventListener('click', () => showHeatmap(button.dataset.heatmap)));
+    } catch (error) { status.textContent = error.message; }
+  }
+
+  async function play(id) {
+    const events = await api('replay', id);
+    const container = document.querySelector('#replay');
+    container.replaceChildren();
+    document.querySelector('#player').hidden = false;
+    const replayer = new Replayer(events, { root: container, mouseTail: true });
+    replayer.play();
+  }
+
+  async function showHeatmap(id) {
+    const data = await api('heatmap', id);
+    if (!data.snapshot) throw new Error('Для desktop ещё нет снимка.');
+    const section = document.querySelector('#heatmap');
+    const root = document.querySelector('#heatmap-replay');
+    root.replaceChildren();
+    section.hidden = false;
+    const replayer = new Replayer(data.snapshot, { root, mouseTail: false });
+    replayer.play(0);
+    setTimeout(() => {
+      replayer.pause();
+      const stage = document.querySelector('#heatmap-stage');
+      const canvas = document.querySelector('#heatmap-canvas');
+      canvas.width = Math.max(stage.scrollWidth, stage.clientWidth);
+      canvas.height = Math.max(stage.scrollHeight, stage.clientHeight);
+      const context = canvas.getContext('2d');
+      const maximum = Math.max(...data.clicks.map(point => point.count), 1);
+      for (const point of data.clicks) {
+        const strength = Math.max(.15, point.count / maximum);
+        const gradient = context.createRadialGradient(point.x, point.y, 0, point.x, point.y, 38);
+        gradient.addColorStop(0, `rgba(255, 40, 20, ${strength})`);
+        gradient.addColorStop(.45, `rgba(255, 190, 0, ${strength * .7})`);
+        gradient.addColorStop(1, 'rgba(0, 80, 255, 0)');
+        context.fillStyle = gradient;
+        context.fillRect(point.x - 38, point.y - 38, 76, 76);
+      }
+      section.scrollIntoView({ behavior: 'smooth' });
+    }, 250);
+  }
+
+  load();
+</script>
+</body>
+</html>
