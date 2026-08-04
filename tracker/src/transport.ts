@@ -5,6 +5,14 @@ import type { BatchEnvelope, CollectorResponse, EventEnvelope } from './types';
 
 const MAX_KEEPALIVE_BYTES = 60_000;
 
+interface EncodedBody {
+  body: BodyInit;
+  headers: Record<string, string>;
+  size: number;
+  originalSize: number;
+  compressed: boolean;
+}
+
 export class Transport {
   public constructor(
     private readonly endpoint: string,
@@ -16,11 +24,13 @@ export class Transport {
 
   private queue: EventEnvelope[] = [];
   private timer: ReturnType<typeof setTimeout> | undefined;
+  private flushing = false;
 
   public async send(event: Omit<EventEnvelope, 'schemaVersion' | 'projectToken' | 'url'>): Promise<CollectorResponse | null> {
     const envelope = this.envelope(event);
+    let encoded: EncodedBody | undefined;
     try {
-      const encoded = await this.encodeBody(JSON.stringify(envelope));
+      encoded = await this.encodeBody(JSON.stringify(envelope));
       const response = await fetch(this.endpoint, {
         method: 'POST',
         headers: encoded.headers,
@@ -29,12 +39,12 @@ export class Transport {
         keepalive: encoded.size <= MAX_KEEPALIVE_BYTES,
       });
       if (!response.ok) {
-        throw new Error(`Collector returned HTTP ${response.status}.`);
+        throw await this.responseError(response, encoded);
       }
 
       return (await response.json()) as CollectorResponse;
     } catch (error) {
-      this.onError(error);
+      this.onError(this.transportError(error, encoded));
       return null;
     }
   }
@@ -61,7 +71,8 @@ export class Transport {
   }
 
   public async flush(useBeacon = false): Promise<void> {
-    if (this.queue.length === 0) return;
+    if (this.flushing || this.queue.length === 0) return;
+    this.flushing = true;
     const payload: BatchEnvelope = {
       schemaVersion: 2,
       projectToken: this.projectToken,
@@ -70,11 +81,12 @@ export class Transport {
     };
     clearTimeout(this.timer);
     this.timer = undefined;
+    let encoded: EncodedBody | undefined;
     try {
       const body = JSON.stringify(payload);
       const bodySize = this.byteLength(body);
       if (useBeacon && bodySize <= MAX_KEEPALIVE_BYTES && navigator.sendBeacon(this.endpoint, new Blob([body], { type: 'text/plain;charset=UTF-8' }))) return;
-      const encoded = await this.encodeBody(body);
+      encoded = await this.encodeBody(body);
       const response = await fetch(this.endpoint, {
         method: 'POST',
         headers: encoded.headers,
@@ -82,12 +94,15 @@ export class Transport {
         credentials: 'omit',
         keepalive: encoded.size <= MAX_KEEPALIVE_BYTES,
       });
-      if (!response.ok) throw new Error(`Collector returned HTTP ${response.status}.`);
+      if (!response.ok) throw await this.responseError(response, encoded);
     } catch (error) {
       this.queue.unshift(...payload.events);
       if (this.queue.length > 1_000) this.queue.length = 1_000;
-      if (!useBeacon) this.timer = setTimeout(() => void this.flush(), Math.max(this.flushMs, 5_000));
-      this.onError(error);
+      this.timer = setTimeout(() => void this.flush(), Math.max(this.flushMs, 5_000));
+      this.onError(this.transportError(error, encoded));
+    } finally {
+      this.flushing = false;
+      if (this.queue.length > 0 && !this.timer) this.timer = setTimeout(() => void this.flush(), this.flushMs);
     }
   }
 
@@ -104,10 +119,10 @@ export class Transport {
     return new Blob([value]).size;
   }
 
-  private async encodeBody(value: string): Promise<{ body: BodyInit; headers: Record<string, string>; size: number }> {
+  private async encodeBody(value: string): Promise<EncodedBody> {
     const source = new Blob([value], { type: 'text/plain;charset=UTF-8' });
     if (typeof CompressionStream !== 'function' || source.size < MAX_KEEPALIVE_BYTES) {
-      return { body: value, headers: { 'Content-Type': 'text/plain;charset=UTF-8' }, size: source.size };
+      return { body: value, headers: { 'Content-Type': 'text/plain;charset=UTF-8' }, size: source.size, originalSize: source.size, compressed: false };
     }
 
     const stream = source.stream().pipeThrough(new CompressionStream('gzip'));
@@ -117,6 +132,34 @@ export class Transport {
       body,
       headers: { 'Content-Type': 'text/plain;charset=UTF-8' },
       size: body.size,
+      originalSize: source.size,
+      compressed: true,
     };
+  }
+
+  private async responseError(response: Response, encoded: EncodedBody): Promise<Error> {
+    let message = '';
+    try {
+      const text = (await response.text()).slice(0, 2_048);
+      const payload = JSON.parse(text) as { message?: unknown };
+      message = typeof payload.message === 'string' ? payload.message : text;
+    } catch {
+      message = response.statusText;
+    }
+    const details = message ? `: ${message.slice(0, 512)}` : '';
+    return new Error(`Collector returned HTTP ${response.status} for ${this.endpoint} (${this.payloadDescription(encoded)})${details}`);
+  }
+
+  private transportError(error: unknown, encoded?: EncodedBody): Error {
+    if (error instanceof Error && error.message.startsWith('Collector returned HTTP')) return error;
+    const reason = error instanceof Error ? error.message : String(error);
+    const payload = encoded ? `, ${this.payloadDescription(encoded)}` : '';
+    return new Error(`Analytics request to ${this.endpoint} failed${payload}: ${reason}`, { cause: error });
+  }
+
+  private payloadDescription(encoded: EncodedBody): string {
+    return encoded.compressed
+      ? `gzip ${encoded.size} bytes, decoded ${encoded.originalSize} bytes`
+      : `${encoded.size} bytes`;
   }
 }

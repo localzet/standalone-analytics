@@ -10,8 +10,10 @@ declare(strict_types=1);
 namespace Localzet\LaravelAnalytics\Http\Middleware;
 
 use Closure;
+use Illuminate\Contracts\Debug\ExceptionHandler;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
+use Throwable;
 
 final class AnalyticsCors
 {
@@ -23,7 +25,13 @@ final class AnalyticsCors
             abort_unless($origin !== '' && in_array($origin, $allowed, true), 403);
             $response = response()->noContent();
         } else {
-            $response = $next($request);
+            try {
+                $response = $next($request);
+            } catch (Throwable $exception) {
+                $handler = app(ExceptionHandler::class);
+                $handler->report($exception);
+                $response = $handler->render($request, $exception);
+            }
         }
         if ($origin !== '' && in_array($origin, $allowed, true)) {
             $response->headers->set('Access-Control-Allow-Origin', $origin);
