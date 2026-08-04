@@ -1,4 +1,5 @@
 <?php
+
 /*
  * SPDX-FileCopyrightText: 2025-2026 Zorin Projects S.P. <creator@localzet.com>
  * SPDX-License-Identifier: AGPL-3.0-or-later
@@ -9,7 +10,8 @@ declare(strict_types=1);
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Support\Facades\DB;
 
-return new class extends Migration {
+return new class extends Migration
+{
     public function up(): void
     {
         if (DB::connection(config('personal-analytics.connection'))->getDriverName() !== 'pgsql') {

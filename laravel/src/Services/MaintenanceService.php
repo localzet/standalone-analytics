@@ -1,4 +1,5 @@
 <?php
+
 /*
  * SPDX-FileCopyrightText: 2025-2026 Zorin Projects S.P. <creator@localzet.com>
  * SPDX-License-Identifier: AGPL-3.0-or-later
@@ -14,9 +15,7 @@ use Illuminate\Filesystem\FilesystemManager;
 
 final readonly class MaintenanceService
 {
-    public function __construct(private DatabaseManager $database, private FilesystemManager $filesystems)
-    {
-    }
+    public function __construct(private DatabaseManager $database, private FilesystemManager $filesystems) {}
 
     public function maintain(): array
     {
@@ -29,7 +28,9 @@ final readonly class MaintenanceService
         $deletedRollups = $connection->table('analytics_daily_rollups')->where('day', '<', $rollupCutoff)->delete();
         $expired = $connection->table('analytics_replays')->where('expires_at', '<', now())->pluck('id');
         $disk = $this->filesystems->disk((string) config('personal-analytics.storage_disk'));
-        foreach ($expired as $id) $disk->deleteDirectory(trim((string) config('personal-analytics.storage_prefix'), '/') . '/' . $id);
+        foreach ($expired as $id) {
+            $disk->deleteDirectory(trim((string) config('personal-analytics.storage_prefix'), '/').'/'.$id);
+        }
         $deletedReplays = $connection->table('analytics_replays')->whereIn('id', $expired)->delete();
 
         return compact('partitionsDropped', 'deletedEvents', 'deletedRollups', 'deletedReplays');
@@ -42,7 +43,7 @@ final readonly class MaintenanceService
         for ($offset = 0; $offset <= $months; $offset++) {
             $start = CarbonImmutable::now()->startOfMonth()->addMonths($offset);
             $end = $start->addMonth();
-            $table = 'analytics_events_' . $start->format('Ym');
+            $table = 'analytics_events_'.$start->format('Ym');
             $from = $connection->getPdo()->quote($start->toDateString());
             $to = $connection->getPdo()->quote($end->toDateString());
             try {
@@ -65,12 +66,17 @@ final readonly class MaintenanceService
             SQL);
         $dropped = 0;
         foreach ($partitions as $partition) {
-            if (!preg_match('/^analytics_events_(\d{6})$/', (string) $partition->name, $matches)) continue;
+            if (! preg_match('/^analytics_events_(\d{6})$/', (string) $partition->name, $matches)) {
+                continue;
+            }
             $month = CarbonImmutable::createFromFormat('!Ym', $matches[1]);
-            if ($month === false || $month->addMonth()->greaterThan($cutoff)) continue;
-            $connection->statement('DROP TABLE IF EXISTS ' . $partition->name);
+            if ($month === false || $month->addMonth()->greaterThan($cutoff)) {
+                continue;
+            }
+            $connection->statement('DROP TABLE IF EXISTS '.$partition->name);
             $dropped++;
         }
+
         return $dropped;
     }
 }

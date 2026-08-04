@@ -1,4 +1,5 @@
 <?php
+
 /*
  * SPDX-FileCopyrightText: 2025-2026 Zorin Projects S.P. <creator@localzet.com>
  * SPDX-License-Identifier: AGPL-3.0-or-later
@@ -7,7 +8,7 @@
 declare(strict_types=1);
 
 return [
-    'enabled' => env('PERSONAL_ANALYTICS_ENABLED', true),
+    'enabled' => env('PERSONAL_ANALYTICS_ENABLED', false),
     'project_token' => env('PERSONAL_ANALYTICS_TOKEN'),
     'allowed_host' => env('PERSONAL_ANALYTICS_HOST', parse_url((string) env('APP_URL'), PHP_URL_HOST)),
     'allowed_origins' => array_values(array_filter(array_map('trim', explode(',', (string) env('PERSONAL_ANALYTICS_ORIGINS', env('APP_URL')))))),

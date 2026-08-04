@@ -1,4 +1,5 @@
 <?php
+
 /*
  * SPDX-FileCopyrightText: 2025-2026 Zorin Projects S.P. <creator@localzet.com>
  * SPDX-License-Identifier: AGPL-3.0-or-later
@@ -15,22 +16,24 @@ use RuntimeException;
 
 final readonly class HeatmapStorage
 {
-    public function __construct(private DatabaseManager $database, private FilesystemManager $filesystems)
-    {
-    }
+    public function __construct(private DatabaseManager $database, private FilesystemManager $filesystems) {}
 
     /** @param list<mixed> $events */
     public function putSnapshot(string $key, string $path, string $deviceType, int $viewportWidth, array $events, string $occurredAt): void
     {
-        if (!preg_match('/^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,63}$/', $key)) return;
+        if (! preg_match('/^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,63}$/', $key)) {
+            return;
+        }
         $deviceType = in_array($deviceType, ['desktop', 'tablet', 'mobile'], true) ? $deviceType : 'desktop';
         $connection = $this->database->connection(config('personal-analytics.connection'));
         $snapshotId = (string) Str::uuid();
         $payload = gzencode(json_encode($events, JSON_THROW_ON_ERROR | JSON_INVALID_UTF8_SUBSTITUTE), 4);
-        if ($payload === false) throw new RuntimeException('Unable to compress heatmap snapshot.');
-        $storagePath = trim((string) config('personal-analytics.storage_prefix'), '/') . "/heatmaps/{$key}/{$deviceType}-{$snapshotId}.json.gz";
+        if ($payload === false) {
+            throw new RuntimeException('Unable to compress heatmap snapshot.');
+        }
+        $storagePath = trim((string) config('personal-analytics.storage_prefix'), '/')."/heatmaps/{$key}/{$deviceType}-{$snapshotId}.json.gz";
         $disk = $this->filesystems->disk((string) config('personal-analytics.storage_disk'));
-        if (!$disk->put($storagePath, $payload, ['visibility' => 'private'])) {
+        if (! $disk->put($storagePath, $payload, ['visibility' => 'private'])) {
             throw new RuntimeException('Unable to store heatmap snapshot.');
         }
 
@@ -50,7 +53,9 @@ final readonly class HeatmapStorage
             $disk->delete($storagePath);
             throw $exception;
         }
-        if (is_string($previous) && $previous !== $storagePath) $disk->delete($previous);
+        if (is_string($previous) && $previous !== $storagePath) {
+            $disk->delete($previous);
+        }
     }
 
     /** @return list<mixed> */
@@ -58,8 +63,11 @@ final readonly class HeatmapStorage
     {
         $path = $this->database->connection(config('personal-analytics.connection'))->table('analytics_heatmap_snapshots')
             ->where('heatmap_key', $key)->where('device_type', $deviceType)->value('storage_path');
-        if (!is_string($path)) return [];
+        if (! is_string($path)) {
+            return [];
+        }
         $decoded = gzdecode($this->filesystems->disk((string) config('personal-analytics.storage_disk'))->get($path));
+
         return $decoded === false ? [] : json_decode($decoded, true, 512, JSON_THROW_ON_ERROR);
     }
 }

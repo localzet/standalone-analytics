@@ -1,4 +1,5 @@
 <?php
+
 /*
  * SPDX-FileCopyrightText: 2025-2026 Zorin Projects S.P. <creator@localzet.com>
  * SPDX-License-Identifier: AGPL-3.0-or-later
@@ -15,9 +16,7 @@ use RuntimeException;
 
 final readonly class ReplayStorage
 {
-    public function __construct(private FilesystemManager $filesystems)
-    {
-    }
+    public function __construct(private FilesystemManager $filesystems) {}
 
     /** @param list<mixed> $events */
     public function putChunk(string $visitorId, string $sessionId, string $chunkId, int $sequence, array $events, string $occurredAt): void
@@ -26,9 +25,11 @@ final readonly class ReplayStorage
         $replay = $connection->table('analytics_replays')->where('session_id', $sessionId)->first();
         $replayId = $replay?->id ?? (string) Str::uuid();
         $payload = gzencode(json_encode($events, JSON_THROW_ON_ERROR | JSON_INVALID_UTF8_SUBSTITUTE), 4);
-        if ($payload === false) throw new RuntimeException('Unable to compress replay chunk.');
-        $path = trim((string) config('personal-analytics.storage_prefix'), '/') . "/{$replayId}/{$sequence}-{$chunkId}.json.gz";
-        if (!$this->filesystems->disk((string) config('personal-analytics.storage_disk'))->put($path, $payload, ['visibility' => 'private'])) {
+        if ($payload === false) {
+            throw new RuntimeException('Unable to compress replay chunk.');
+        }
+        $path = trim((string) config('personal-analytics.storage_prefix'), '/')."/{$replayId}/{$sequence}-{$chunkId}.json.gz";
+        if (! $this->filesystems->disk((string) config('personal-analytics.storage_disk'))->put($path, $payload, ['visibility' => 'private'])) {
             throw new RuntimeException('Unable to store replay chunk.');
         }
         $expiresAt = now()->addDays((int) config('personal-analytics.retention.replays_days'));
@@ -46,8 +47,8 @@ final readonly class ReplayStorage
                 ]);
                 if ($inserted > 0) {
                     $connection->table('analytics_replays')->where('id', $replayId)->update([
-                        'events_count' => DB::raw('events_count + ' . count($events)),
-                        'bytes' => DB::raw('bytes + ' . strlen($payload)),
+                        'events_count' => DB::raw('events_count + '.count($events)),
+                        'bytes' => DB::raw('bytes + '.strlen($payload)),
                         'last_seen_at' => $occurredAt,
                     ]);
                 }
@@ -67,9 +68,12 @@ final readonly class ReplayStorage
         $disk = $this->filesystems->disk((string) config('personal-analytics.storage_disk'));
         foreach ($chunks as $chunk) {
             $decoded = gzdecode($disk->get($chunk->storage_path));
-            if ($decoded === false) continue;
+            if ($decoded === false) {
+                continue;
+            }
             array_push($events, ...json_decode($decoded, true, 512, JSON_THROW_ON_ERROR));
         }
+
         return $events;
     }
 }

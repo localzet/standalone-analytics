@@ -1,4 +1,5 @@
 <?php
+
 /*
  * SPDX-FileCopyrightText: 2025-2026 Zorin Projects S.P. <creator@localzet.com>
  * SPDX-License-Identifier: AGPL-3.0-or-later
@@ -12,10 +13,10 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
 use Illuminate\Support\Facades\Bus;
+use JsonException;
 use Localzet\LaravelAnalytics\Contracts\GeoResolver;
 use Localzet\LaravelAnalytics\Contracts\UserAgentResolver;
 use Localzet\LaravelAnalytics\Jobs\ProcessAnalyticsBatch;
-use JsonException;
 
 final class AnalyticsCollectorController extends Controller
 {

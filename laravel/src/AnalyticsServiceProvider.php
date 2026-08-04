@@ -1,4 +1,5 @@
 <?php
+
 /*
  * SPDX-FileCopyrightText: 2025-2026 Zorin Projects S.P. <creator@localzet.com>
  * SPDX-License-Identifier: AGPL-3.0-or-later
@@ -17,8 +18,8 @@ use Localzet\LaravelAnalytics\Commands\AggregateAnalyticsCommand;
 use Localzet\LaravelAnalytics\Commands\MaintainAnalyticsCommand;
 use Localzet\LaravelAnalytics\Contracts\GeoResolver;
 use Localzet\LaravelAnalytics\Contracts\UserAgentResolver;
-use Localzet\LaravelAnalytics\Services\ReplayStorage;
 use Localzet\LaravelAnalytics\Services\HeatmapStorage;
+use Localzet\LaravelAnalytics\Services\ReplayStorage;
 use Localzet\LaravelAnalytics\Support\NullGeoResolver;
 use Localzet\LaravelAnalytics\Support\NullUserAgentResolver;
 
@@ -26,7 +27,7 @@ final class AnalyticsServiceProvider extends ServiceProvider
 {
     public function register(): void
     {
-        $this->mergeConfigFrom(dirname(__DIR__) . '/config/personal-analytics.php', 'personal-analytics');
+        $this->mergeConfigFrom(dirname(__DIR__).'/config/personal-analytics.php', 'personal-analytics');
         $this->app->bind(GeoResolver::class, NullGeoResolver::class);
         $this->app->bind(UserAgentResolver::class, NullUserAgentResolver::class);
         $this->app->singleton(ReplayStorage::class);
@@ -35,20 +36,22 @@ final class AnalyticsServiceProvider extends ServiceProvider
 
     public function boot(): void
     {
-        if (!config('personal-analytics.enabled')) return;
-        $this->loadRoutesFrom(dirname(__DIR__) . '/routes/analytics.php');
-        $this->loadViewsFrom(dirname(__DIR__) . '/resources/views', 'personal-analytics');
-        $this->loadMigrationsFrom(dirname(__DIR__) . '/database/migrations');
+        if (! config('personal-analytics.enabled')) {
+            return;
+        }
+        $this->loadRoutesFrom(dirname(__DIR__).'/routes/analytics.php');
+        $this->loadViewsFrom(dirname(__DIR__).'/resources/views', 'personal-analytics');
+        $this->loadMigrationsFrom(dirname(__DIR__).'/database/migrations');
         $this->publishes([
-            dirname(__DIR__) . '/config/personal-analytics.php' => config_path('personal-analytics.php'),
+            dirname(__DIR__).'/config/personal-analytics.php' => config_path('personal-analytics.php'),
         ], 'personal-analytics-config');
         $this->publishes([
-            dirname(__DIR__) . '/resources/views' => resource_path('views/vendor/personal-analytics'),
+            dirname(__DIR__).'/resources/views' => resource_path('views/vendor/personal-analytics'),
         ], 'personal-analytics-views');
 
         RateLimiter::for('personal-analytics-ingest', static fn (Request $request): Limit => Limit::perMinute(
             (int) config('personal-analytics.rate_limit_per_minute', 600),
-        )->by($request->ip() . '|' . $request->header('Origin', 'unknown')));
+        )->by($request->ip().'|'.$request->header('Origin', 'unknown')));
 
         if ($this->app->runningInConsole()) {
             $this->commands([AggregateAnalyticsCommand::class, MaintainAnalyticsCommand::class]);

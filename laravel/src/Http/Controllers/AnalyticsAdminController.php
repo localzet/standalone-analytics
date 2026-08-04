@@ -1,4 +1,5 @@
 <?php
+
 /*
  * SPDX-FileCopyrightText: 2025-2026 Zorin Projects S.P. <creator@localzet.com>
  * SPDX-License-Identifier: AGPL-3.0-or-later
@@ -13,8 +14,8 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
 use Illuminate\View\View;
-use Localzet\LaravelAnalytics\Services\ReplayStorage;
 use Localzet\LaravelAnalytics\Services\HeatmapStorage;
+use Localzet\LaravelAnalytics\Services\ReplayStorage;
 use Localzet\LaravelAnalytics\Services\ReportService;
 
 final class AnalyticsAdminController extends Controller
@@ -38,6 +39,7 @@ final class AnalyticsAdminController extends Controller
             'heatmaps' => $reports->heatmaps($from, $to),
             default => abort(404),
         };
+
         return response()->json($data)->header('Cache-Control', 'private, max-age=30');
     }
 
@@ -49,6 +51,7 @@ final class AnalyticsAdminController extends Controller
     public function heatmapSnapshot(string $heatmap, string $device, HeatmapStorage $storage): JsonResponse
     {
         abort_unless(in_array($device, ['desktop', 'tablet', 'mobile'], true), 404);
+
         return response()->json(['events' => $storage->snapshot($heatmap, $device)])->header('Cache-Control', 'private, no-store');
     }
 }

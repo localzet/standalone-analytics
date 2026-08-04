@@ -1,4 +1,5 @@
 <?php
+
 /*
  * SPDX-FileCopyrightText: 2025-2026 Zorin Projects S.P. <creator@localzet.com>
  * SPDX-License-Identifier: AGPL-3.0-or-later
@@ -14,9 +15,7 @@ use Illuminate\Database\DatabaseManager;
 
 final readonly class ReportService
 {
-    public function __construct(private DatabaseManager $database)
-    {
-    }
+    public function __construct(private DatabaseManager $database) {}
 
     public function dashboard(CarbonImmutable $from, CarbonImmutable $to): array
     {
@@ -50,6 +49,7 @@ final readonly class ReportService
         $session = $this->connection()->table('analytics_sessions')->whereBetween('started_at', [$from, $to])->selectRaw(
             'COALESCE(AVG(engagement_ms),0) AS engagement, COALESCE(AVG(CASE WHEN is_bounced THEN 1 ELSE 0 END) * 100,0) AS bounce_rate',
         )->first();
+
         return [
             'visitors' => (int) $row->visitors, 'sessions' => (int) $row->sessions, 'pageviews' => (int) $row->pageviews,
             'events' => (int) $row->events, 'conversions' => (int) $row->conversions, 'revenue' => (float) $row->revenue,
@@ -89,6 +89,7 @@ final readonly class ReportService
     public function funnels(CarbonImmutable $from, CarbonImmutable $to): array
     {
         $funnels = $this->connection()->table('analytics_funnels')->where('enabled', true)->get();
+
         return $funnels->map(function (object $funnel) use ($from, $to): array {
             $steps = json_decode($funnel->steps, true) ?: [];
             $result = [];
@@ -97,17 +98,23 @@ final readonly class ReportService
                 $joins = '';
                 $conditions = [];
                 for ($position = 0; $position <= $index; $position++) {
-                    $alias = 'step_' . $position;
+                    $alias = 'step_'.$position;
                     if ($position > 0) {
-                        $previous = 'step_' . ($position - 1);
+                        $previous = 'step_'.($position - 1);
                         $hours = max(1, min(8760, (int) $funnel->conversion_window_hours));
                         $joins .= " JOIN analytics_events {$alias} ON {$alias}.visitor_id = step_0.visitor_id AND {$alias}.occurred_at >= {$previous}.occurred_at AND {$alias}.occurred_at <= step_0.occurred_at + INTERVAL '{$hours} hours'";
                     }
                     $definition = is_array($steps[$position] ?? null) ? $steps[$position] : [];
-                    if (isset($definition['event'])) { $conditions[] = "{$alias}.name = ?"; $bindings[] = $definition['event']; }
-                    if (isset($definition['path'])) { $conditions[] = "{$alias}.path = ?"; $bindings[] = $definition['path']; }
+                    if (isset($definition['event'])) {
+                        $conditions[] = "{$alias}.name = ?";
+                        $bindings[] = $definition['event'];
+                    }
+                    if (isset($definition['path'])) {
+                        $conditions[] = "{$alias}.path = ?";
+                        $bindings[] = $definition['path'];
+                    }
                 }
-                $where = $conditions === [] ? '' : ' AND ' . implode(' AND ', $conditions);
+                $where = $conditions === [] ? '' : ' AND '.implode(' AND ', $conditions);
                 $row = $this->connection()->selectOne(
                     "SELECT COUNT(DISTINCT step_0.visitor_id) AS visitors FROM analytics_events step_0{$joins} WHERE step_0.occurred_at BETWEEN ? AND ?{$where}",
                     $bindings,
@@ -118,6 +125,7 @@ final readonly class ReportService
                     'visitors' => (int) ($row->visitors ?? 0),
                 ];
             }
+
             return ['id' => $funnel->id, 'name' => $funnel->name, 'steps' => $result];
         })->all();
     }
@@ -125,6 +133,7 @@ final readonly class ReportService
     public function realtime(): array
     {
         $from = now()->subMinutes(5);
+
         return [
             'activeVisitors' => $this->connection()->table('analytics_events')->where('occurred_at', '>=', $from)->distinct()->count('visitor_id'),
             'events' => $this->connection()->table('analytics_events')->where('occurred_at', '>=', $from)->count(),

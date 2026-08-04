@@ -35,7 +35,7 @@
         <article class="panel wide"><h2>Тепловые карты</h2><div id="heatmaps"></div></article>
     </section>
 </main><script>
-const endpoint=@json(route('personal-analytics.admin.report',['report'=>'dashboard']));
+const endpoint=@json(route('personal-analytics.admin.report',['report'=>'dashboard'], false));
 const esc=v=>String(v??'—').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const table=(rows,columns)=>`<table><thead><tr>${columns.map(c=>`<th>${c[1]}</th>`).join('')}</tr></thead><tbody>${(rows||[]).map(r=>`<tr>${columns.map(c=>`<td>${esc(r[c[0]])}</td>`).join('')}</tr>`).join('')}</tbody></table>`;
 const today=new Date(),past=new Date(Date.now()-29*864e5);to.value=today.toISOString().slice(0,10);from.value=past.toISOString().slice(0,10);

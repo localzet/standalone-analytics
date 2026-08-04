@@ -1,4 +1,5 @@
 <?php
+
 /*
  * SPDX-FileCopyrightText: 2025-2026 Zorin Projects S.P. <creator@localzet.com>
  * SPDX-License-Identifier: AGPL-3.0-or-later
@@ -20,28 +21,38 @@ final readonly class IngestionService
         private ReplayStorage $replays,
         private HeatmapStorage $heatmaps,
         private PayloadSanitizer $sanitizer,
-    )
-    {
-    }
+    ) {}
 
     /** @param list<array<string, mixed>> $events @param array<string, mixed> $requestContext */
     public function ingest(array $events, array $requestContext): void
     {
         $connection = $this->database->connection(config('personal-analytics.connection'));
         $connection->transaction(function () use ($connection, $events, $requestContext): void {
-            foreach ($events as $event) $this->projectIdentities($connection, $event, $requestContext);
+            foreach ($events as $event) {
+                $this->projectIdentities($connection, $event, $requestContext);
+            }
             $rows = [];
             foreach ($events as $event) {
-                if (in_array(($event['type'] ?? null), ['replay', 'heatmap_snapshot'], true)) continue;
+                if (in_array(($event['type'] ?? null), ['replay', 'heatmap_snapshot'], true)) {
+                    continue;
+                }
                 $row = $this->eventRow($event, $requestContext);
-                if ($row !== null) $rows[] = $row;
+                if ($row !== null) {
+                    $rows[] = $row;
+                }
             }
-            foreach (array_chunk($rows, 250) as $chunk) $connection->table('analytics_events')->insertOrIgnore($chunk);
+            foreach (array_chunk($rows, 250) as $chunk) {
+                $connection->table('analytics_events')->insertOrIgnore($chunk);
+            }
             $this->updateSessionCounters($connection, $rows);
         }, 3);
         foreach ($events as $event) {
-            if (($event['type'] ?? null) === 'replay') $this->storeReplay($event);
-            if (($event['type'] ?? null) === 'heatmap_snapshot') $this->storeHeatmapSnapshot($event);
+            if (($event['type'] ?? null) === 'replay') {
+                $this->storeReplay($event);
+            }
+            if (($event['type'] ?? null) === 'heatmap_snapshot') {
+                $this->storeHeatmapSnapshot($event);
+            }
         }
     }
 
@@ -49,7 +60,9 @@ final readonly class IngestionService
     private function projectIdentities(ConnectionInterface $connection, array $event, array $context): void
     {
         $visitorId = $this->uuid($event['visitorId'] ?? null);
-        if ($visitorId === null) return;
+        if ($visitorId === null) {
+            return;
+        }
         $data = is_array($event['data'] ?? null) ? $event['data'] : [];
         $occurredAt = $this->occurredAt($data['occurredAt'] ?? null);
         $connection->table('analytics_visitors')->insertOrIgnore([[
@@ -81,7 +94,9 @@ final readonly class IngestionService
         }
 
         $sessionId = $this->uuid($event['sessionId'] ?? null);
-        if ($sessionId === null) return;
+        if ($sessionId === null) {
+            return;
+        }
         $path = substr((string) ($data['path'] ?? parse_url((string) ($event['url'] ?? ''), PHP_URL_PATH) ?: '/'), 0, 2048);
         $inserted = $connection->table('analytics_sessions')->insertOrIgnore([[
             'id' => $sessionId, 'visitor_id' => $visitorId, 'started_at' => $occurredAt, 'last_seen_at' => $occurredAt,
@@ -99,7 +114,9 @@ final readonly class IngestionService
     private function eventRow(array $event, array $context): ?array
     {
         $visitorId = $this->uuid($event['visitorId'] ?? null);
-        if ($visitorId === null) return null;
+        if ($visitorId === null) {
+            return null;
+        }
         $data = is_array($event['data'] ?? null) ? $event['data'] : [];
         $type = (string) ($event['type'] ?? 'unknown');
         $isGeneric = $type === 'event';
@@ -126,6 +143,7 @@ final readonly class IngestionService
             $data['metrics'],
             static fn (mixed $value): bool => (is_int($value) || is_float($value)) && is_finite((float) $value),
         ) : [];
+
         return [
             'id' => $id, 'visitor_id' => $visitorId, 'session_id' => $this->uuid($event['sessionId'] ?? null),
             'page_event_id' => $this->uuid($event['eventId'] ?? null), 'name' => substr($name, 0, 128),
@@ -147,7 +165,9 @@ final readonly class IngestionService
         $sessionId = $this->uuid($event['sessionId'] ?? null);
         $chunkId = $this->uuid($event['chunkId'] ?? null);
         $data = $event['data'] ?? null;
-        if ($visitorId === null || $sessionId === null || $chunkId === null || !is_array($data) || !array_is_list($data)) return;
+        if ($visitorId === null || $sessionId === null || $chunkId === null || ! is_array($data) || ! array_is_list($data)) {
+            return;
+        }
         $this->replays->putChunk($visitorId, $sessionId, $chunkId, max(0, (int) ($event['sequence'] ?? 0)), $data, now()->toISOString());
     }
 
@@ -156,7 +176,9 @@ final readonly class IngestionService
     {
         $key = (string) ($event['heatmapKey'] ?? '');
         $data = $event['data'] ?? null;
-        if ($key === '' || !is_array($data) || !array_is_list($data)) return;
+        if ($key === '' || ! is_array($data) || ! array_is_list($data)) {
+            return;
+        }
         $path = substr((string) (parse_url((string) ($event['url'] ?? ''), PHP_URL_PATH) ?: '/'), 0, 2048);
         $this->heatmaps->putSnapshot(
             $key,
@@ -191,7 +213,9 @@ final readonly class IngestionService
         }
 
         $visitorIds = array_values(array_unique(array_column($rows, 'visitor_id')));
-        if ($visitorIds === []) return;
+        if ($visitorIds === []) {
+            return;
+        }
         $placeholders = implode(',', array_fill(0, count($visitorIds), '?::uuid'));
         $connection->update(<<<SQL
             UPDATE analytics_visitors AS visitor
@@ -214,7 +238,11 @@ final readonly class IngestionService
 
     private function occurredAt(mixed $value): string
     {
-        try { return (new DateTimeImmutable(is_string($value) ? $value : 'now'))->format(DATE_ATOM); } catch (\Throwable) { return now()->toISOString(); }
+        try {
+            return (new DateTimeImmutable(is_string($value) ? $value : 'now'))->format(DATE_ATOM);
+        } catch (\Throwable) {
+            return now()->toISOString();
+        }
     }
 
     private function json(mixed $value): string
