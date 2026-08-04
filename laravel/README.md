@@ -46,6 +46,8 @@ Never reuse `PERSONAL_ANALYTICS_TOKEN` for admin access. It is a public ingestio
 
 The browser tracker and Laravel package should be upgraded together. Tracker 0.2 compresses large replay and heatmap payloads before transport; Laravel 0.2 safely decompresses them with independent compressed and decoded size limits.
 
+Replay rows reference compressed chunk files on `PERSONAL_ANALYTICS_STORAGE_DISK`. In containers, either use an S3-compatible disk or mount the selected local disk path as a persistent volume. Recreating a container with an ephemeral `storage/app` leaves database rows pointing to files that no longer exist; those historical recordings cannot be reconstructed.
+
 ## Storage model
 
 - PostgreSQL monthly partitions for raw events, with BRIN/B-tree/GIN indexes;

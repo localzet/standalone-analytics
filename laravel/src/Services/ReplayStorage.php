@@ -62,18 +62,52 @@ final readonly class ReplayStorage
     /** @return list<array<string, mixed>> */
     public function events(string $replayId): array
     {
+        return $this->playback($replayId)['events'];
+    }
+
+    /** @return array{events: list<array<string, mixed>>, chunks: int, missingChunks: list<string>, corruptedChunks: list<string>, complete: bool} */
+    public function playback(string $replayId): array
+    {
         $chunks = DB::connection(config('personal-analytics.connection'))->table('analytics_replay_chunks')
             ->where('replay_id', $replayId)->orderBy('created_at')->orderBy('sequence_no')->get();
         $events = [];
+        $missingChunks = [];
+        $corruptedChunks = [];
         $disk = $this->filesystems->disk((string) config('personal-analytics.storage_disk'));
         foreach ($chunks as $chunk) {
-            $decoded = gzdecode($disk->get($chunk->storage_path));
-            if ($decoded === false) {
+            try {
+                $payload = $disk->get($chunk->storage_path);
+            } catch (\Throwable) {
+                $payload = null;
+            }
+            if (! is_string($payload)) {
+                $missingChunks[] = (string) $chunk->id;
                 continue;
             }
-            array_push($events, ...json_decode($decoded, true, 512, JSON_THROW_ON_ERROR));
+            $decoded = gzdecode($payload);
+            if ($decoded === false) {
+                $corruptedChunks[] = (string) $chunk->id;
+                continue;
+            }
+            try {
+                $chunkEvents = json_decode($decoded, true, 512, JSON_THROW_ON_ERROR);
+            } catch (\JsonException) {
+                $corruptedChunks[] = (string) $chunk->id;
+                continue;
+            }
+            if (! is_array($chunkEvents) || ! array_is_list($chunkEvents)) {
+                $corruptedChunks[] = (string) $chunk->id;
+                continue;
+            }
+            array_push($events, ...$chunkEvents);
         }
 
-        return $events;
+        return [
+            'events' => $events,
+            'chunks' => $chunks->count(),
+            'missingChunks' => $missingChunks,
+            'corruptedChunks' => $corruptedChunks,
+            'complete' => $missingChunks === [] && $corruptedChunks === [],
+        ];
     }
 }

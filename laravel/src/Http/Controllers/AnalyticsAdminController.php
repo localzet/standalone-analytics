@@ -58,7 +58,7 @@ final class AnalyticsAdminController extends Controller
 
     public function replay(string $replay, ReplayStorage $storage): JsonResponse
     {
-        return response()->json(['events' => $storage->events($replay)])->header('Cache-Control', 'private, no-store');
+        return response()->json($storage->playback($replay))->header('Cache-Control', 'private, no-store');
     }
 
     public function heatmapSnapshot(string $heatmap, string $device, HeatmapStorage $storage): JsonResponse

@@ -203,8 +203,12 @@ async function playReplay(id) {
   openModal('<div class="modal-loading">Загружаем запись…</div>', true);
   try {
     const data = await secureFetch(`${config.replayBase}/${id}`);
-    if (!data.events?.length) throw new Error('В записи нет rrweb-событий');
-    modalBody.innerHTML = '<div id="replay-player"></div>';
+    if (!data.events?.length) {
+      if (data.complete === false) throw new Error(`Файлы записи недоступны: отсутствует ${data.missingChunks?.length ?? 0}, повреждено ${data.corruptedChunks?.length ?? 0} чанков. Проверьте storage disk и постоянство тома.`);
+      throw new Error('В записи нет rrweb-событий');
+    }
+    const warning = data.complete === false ? `<div class="warning-box">Запись неполная: отсутствует ${data.missingChunks?.length ?? 0}, повреждено ${data.corruptedChunks?.length ?? 0} чанков.</div>` : '';
+    modalBody.innerHTML = `${warning}<div id="replay-player"></div>`;
     new rrwebPlayer({ target: document.querySelector('#replay-player'), props: { events: data.events, autoPlay: true, showController: true, width: Math.min(1200, window.innerWidth - 100), height: Math.min(720, window.innerHeight - 180) } });
   } catch (error) {
     modalBody.innerHTML = `<div class="error-box">${escapeHtml(error.message)}</div>`;

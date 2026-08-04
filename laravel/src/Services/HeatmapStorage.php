@@ -66,7 +66,15 @@ final readonly class HeatmapStorage
         if (! is_string($path)) {
             return [];
         }
-        $decoded = gzdecode($this->filesystems->disk((string) config('personal-analytics.storage_disk'))->get($path));
+        try {
+            $payload = $this->filesystems->disk((string) config('personal-analytics.storage_disk'))->get($path);
+        } catch (\Throwable) {
+            return [];
+        }
+        if (! is_string($payload)) {
+            return [];
+        }
+        $decoded = gzdecode($payload);
 
         return $decoded === false ? [] : json_decode($decoded, true, 512, JSON_THROW_ON_ERROR);
     }
