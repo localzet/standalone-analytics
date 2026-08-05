@@ -10,9 +10,12 @@ import { isDoNotTrackEnabled } from './privacy';
 import { sanitizeProperties, safeUrl } from './sanitizer';
 import { SafeStorage } from './storage';
 import { Transport } from './transport';
-import type { AnalyticsEvent, AnalyticsOptions, CollectorResponse, HeatmapDefinition } from './types';
+import type { AnalyticsEvent, AnalyticsOptions, CollectorResponse, EventEnvelope, HeatmapDefinition } from './types';
 
 const DEFAULT_SESSION_TIMEOUT = 30 * 60 * 1000;
+const MAX_REPLAY_RETRY_MS = 60_000;
+
+type PendingEvent = Omit<EventEnvelope, 'schemaVersion' | 'projectToken' | 'url'>;
 
 export class PersonalAnalytics {
   private readonly options: Required<Pick<AnalyticsOptions,
@@ -27,7 +30,11 @@ export class PersonalAnalytics {
   private eventId = '';
   private replaySequence = 0;
   private replayEvents: eventWithTime[] = [];
+  private replayChunks: PendingEvent[] = [];
   private replayTimer: ReturnType<typeof setTimeout> | undefined;
+  private replayRetryTimer: ReturnType<typeof setTimeout> | undefined;
+  private replaySending = false;
+  private replayRetryAttempt = 0;
   private stopRecorder: (() => void) | undefined;
   private cleanups: Array<() => void> = [];
   private started = false;
@@ -408,7 +415,31 @@ export class PersonalAnalytics {
     clearTimeout(this.replayTimer);
     this.replayTimer = undefined;
     if (beacon && this.transport.beacon(event)) return;
-    void this.transport.send(event);
+    this.replayChunks.push(event);
+    void this.sendReplayChunks();
+  }
+
+  private async sendReplayChunks(): Promise<void> {
+    if (this.replaySending || this.replayRetryTimer || this.replayChunks.length === 0) return;
+    this.replaySending = true;
+    const event = this.replayChunks[0];
+    try {
+      const response = event ? await this.transport.send(event) : null;
+      if (response?.accepted) {
+        this.replayChunks.shift();
+        this.replayRetryAttempt = 0;
+      } else {
+        this.replayRetryAttempt += 1;
+        const retryMs = Math.min(MAX_REPLAY_RETRY_MS, 5_000 * 2 ** Math.min(this.replayRetryAttempt - 1, 4));
+        this.replayRetryTimer = setTimeout(() => {
+          this.replayRetryTimer = undefined;
+          void this.sendReplayChunks();
+        }, retryMs);
+      }
+    } finally {
+      this.replaySending = false;
+      if (this.replayChunks.length > 0 && !this.replayRetryTimer) void this.sendReplayChunks();
+    }
   }
 
   private scheduleReplayFlush(): void {

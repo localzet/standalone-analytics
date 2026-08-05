@@ -4,6 +4,7 @@
 import type { BatchEnvelope, CollectorResponse, EventEnvelope } from './types';
 
 const MAX_KEEPALIVE_BYTES = 60_000;
+const MAX_RETRY_MS = 60_000;
 
 interface EncodedBody {
   body: BodyInit;
@@ -14,29 +15,34 @@ interface EncodedBody {
 }
 
 export class Transport {
+  private readonly request: typeof window.fetch;
+
   public constructor(
     private readonly endpoint: string,
     private readonly projectToken: string,
     private readonly onError: (error: unknown) => void,
     private readonly batchSize = 20,
     private readonly flushMs = 2_000,
-  ) {}
+  ) {
+    this.request = window.fetch.bind(window);
+  }
 
   private queue: EventEnvelope[] = [];
   private timer: ReturnType<typeof setTimeout> | undefined;
   private flushing = false;
+  private retryAttempt = 0;
+  private retryAt = 0;
 
   public async send(event: Omit<EventEnvelope, 'schemaVersion' | 'projectToken' | 'url'>): Promise<CollectorResponse | null> {
     const envelope = this.envelope(event);
     let encoded: EncodedBody | undefined;
     try {
       encoded = await this.encodeBody(JSON.stringify(envelope));
-      const response = await fetch(this.endpoint, {
+      const response = await this.request(this.endpoint, {
         method: 'POST',
         headers: encoded.headers,
         body: encoded.body,
         credentials: 'omit',
-        keepalive: encoded.size <= MAX_KEEPALIVE_BYTES,
       });
       if (!response.ok) {
         throw await this.responseError(response, encoded);
@@ -62,12 +68,11 @@ export class Transport {
 
   public enqueue(event: Omit<EventEnvelope, 'schemaVersion' | 'projectToken' | 'url'>): void {
     this.queue.push(this.envelope(event));
-    if (this.queue.length >= this.batchSize) {
+    if (this.queue.length >= this.batchSize && !this.timer && Date.now() >= this.retryAt) {
       void this.flush();
       return;
     }
-    clearTimeout(this.timer);
-    this.timer = setTimeout(() => void this.flush(), this.flushMs);
+    if (!this.timer) this.scheduleFlush(Math.max(this.flushMs, this.retryAt - Date.now()));
   }
 
   public async flush(useBeacon = false): Promise<void> {
@@ -85,25 +90,42 @@ export class Transport {
     try {
       const body = JSON.stringify(payload);
       const bodySize = this.byteLength(body);
-      if (useBeacon && bodySize <= MAX_KEEPALIVE_BYTES && navigator.sendBeacon(this.endpoint, new Blob([body], { type: 'text/plain;charset=UTF-8' }))) return;
+      if (useBeacon && bodySize <= MAX_KEEPALIVE_BYTES && navigator.sendBeacon(this.endpoint, new Blob([body], { type: 'text/plain;charset=UTF-8' }))) {
+        this.retryAttempt = 0;
+        this.retryAt = 0;
+        return;
+      }
       encoded = await this.encodeBody(body);
-      const response = await fetch(this.endpoint, {
+      const response = await this.request(this.endpoint, {
         method: 'POST',
         headers: encoded.headers,
         body: encoded.body,
         credentials: 'omit',
-        keepalive: encoded.size <= MAX_KEEPALIVE_BYTES,
+        ...(useBeacon && encoded.size <= MAX_KEEPALIVE_BYTES ? { keepalive: true } : {}),
       });
       if (!response.ok) throw await this.responseError(response, encoded);
+      this.retryAttempt = 0;
+      this.retryAt = 0;
     } catch (error) {
       this.queue.unshift(...payload.events);
       if (this.queue.length > 1_000) this.queue.length = 1_000;
-      this.timer = setTimeout(() => void this.flush(), Math.max(this.flushMs, 5_000));
+      this.retryAttempt += 1;
+      const retryMs = Math.min(MAX_RETRY_MS, Math.max(5_000, this.flushMs) * 2 ** Math.min(this.retryAttempt - 1, 4));
+      this.retryAt = Date.now() + retryMs;
+      this.scheduleFlush(retryMs);
       this.onError(this.transportError(error, encoded));
     } finally {
       this.flushing = false;
-      if (this.queue.length > 0 && !this.timer) this.timer = setTimeout(() => void this.flush(), this.flushMs);
+      if (this.queue.length > 0 && !this.timer) this.scheduleFlush(Math.max(this.flushMs, this.retryAt - Date.now()));
     }
+  }
+
+  private scheduleFlush(delay: number): void {
+    clearTimeout(this.timer);
+    this.timer = setTimeout(() => {
+      this.timer = undefined;
+      void this.flush();
+    }, Math.max(0, delay));
   }
 
   private envelope(event: Omit<EventEnvelope, 'schemaVersion' | 'projectToken' | 'url'>): EventEnvelope {
